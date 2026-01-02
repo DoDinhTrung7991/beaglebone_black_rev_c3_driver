@@ -178,6 +178,17 @@
 		ranges;
 		ti,hwmods = "l3_main";
 
+		bbb_timer4:bbb_timer4@0x48044000 {
+			compatible = "ti,am3358-bbb_timer4";
+			reg = <0x48044000 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			interrupts = <92>;
+			ti,hwmods = "timer4";
+			ti,timer-pwm;
+			status = "disabled";
+		};
+
 		l4_wkup: l4_wkup@44c00000 {
 			compatible = "ti,am3-l4-wkup", "simple-bus";
 			#address-cells = <1>;
