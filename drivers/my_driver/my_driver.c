@@ -250,6 +250,9 @@ int bbb_timer4_probe(struct platform_device *my_platform_device)
     if (0 != return_val)
     {
         pr_err("Can not create device driver!!\r\n");
+        class_destroy(my_class);
+        cdev_del(&my_cdev);
+        unregister_chrdev_region(my_dev, 1);
         return return_val;
     }
     else
@@ -283,6 +286,8 @@ MODULE_DEVICE_TABLE(of, timer4_bbb_id_st);
 
 ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, loff_t *my_loff)
 {
+    size_t len = sizeof(my_buff) - *my_loff;
+
     if (*my_loff >= sizeof(my_buff))
     {
         *my_loff = 0;
@@ -293,67 +298,79 @@ ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, 
         // do nothing
     }
 
-    printk("Size is %d\r\n", sizeof(my_buff));
-    unsigned long bytes_not_copy = copy_to_user((void *)(user_buff + *my_loff), (const void *)(my_buff + *my_loff), (unsigned long)(sizeof(my_buff) - *my_loff));
-    *my_loff += (sizeof(my_buff) - bytes_not_copy);
-    
+    if (len > buff_size)
+    {
+        len = buff_size;
+    }
+    else
+    {
+        // do nothing
+    }
 
+    printk("Size is %zu\r\n", sizeof(my_buff));
+    unsigned long bytes_not_copy = copy_to_user(user_buff, (const void *)(my_buff + *my_loff), len);
+    *my_loff += (len - bytes_not_copy);
+    
     return *my_loff;
 }
 
 ssize_t my_write(struct file *my_file, const char __user *user_buff, size_t buff_size, loff_t *my_loff)
 {
-    ssize_t ret = 0;
-    static loff_t prev_off = 0;
+    unsigned long bytes_not_copy = 0;
+    ssize_t bytes_written = 0;
+    unsigned long bytes_to_copy = buff_size - *my_loff;
 
-    if (buff_size < BUFF_LEN)
+    if (bytes_to_copy > sizeof(my_buff))
+    {
+        printk(KERN_WARNING "User data is bigger than my_buff!!!\r\n");
+        bytes_to_copy = sizeof(my_buff);
+    }
+    else
+    {
+        // do nothing
+    }
+
+    if (0 == *my_loff)
     {
         memset((void *)my_buff, 0, sizeof(my_buff));
-        ret = copy_from_user((void *)(my_buff + *my_loff), (const void *)(user_buff + *my_loff), (unsigned long)(buff_size - *my_loff));
     }
     else
     {
-        printk("Out of range!!!\r\n");
-        return -ENOBUFS;
+        // do nothing
     }
 
-    if (0 != ret)
+    bytes_not_copy = copy_from_user((void *)(my_buff + *my_loff), (const void *)user_buff, (unsigned long)bytes_to_copy);
+
+    if (0 != bytes_not_copy)
     {
         printk("Wrote failed, continue!!!\r\n");
-
-        *my_loff = (loff_t)(buff_size - ret);
-        ret = (ssize_t)(*my_loff - prev_off);
+        bytes_written = (ssize_t)(bytes_to_copy - bytes_not_copy);
+        *my_loff += (loff_t)bytes_written;
     }
     else
     {
-        printk("Size is %d\r\n", buff_size);
-        printk("Wrote successfully %s", my_buff);
+        printk("Size is %zu\r\n", buff_size);
+        printk("Wrote successfully %s\r\n", my_buff);
 
         *my_loff = 0;
-        ret = (ssize_t)buff_size;
+        bytes_written = (ssize_t)buff_size;
     }
 
-    prev_off = *my_loff;
-
-    return ret;
+    return bytes_written;
 }
 
 int my_open(struct inode *my_inode, struct file *my_file)
 {
-    int ret = 0;
-
     printk("my open\r\n");
 
-    return ret;
+    return 0;
 }
 
 int my_release(struct inode *my_inode, struct file *my_file)
 {
-    int ret = 0;
-
     printk("my release\r\n\r\n");
 
-    return ret;
+    return 0;
 }
 
 long my_unlocked_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg)
@@ -371,6 +388,7 @@ long my_unlocked_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg
             else
             {
                 printk("Wrote failed!!!\r\n");
+                ret = -EFAULT;
             }
 
             break;
@@ -385,6 +403,7 @@ long my_unlocked_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg
             else
             {
                 printk("Read failed!!!\r\n");
+                ret = -EFAULT;
             }
 
             break;
