@@ -38,6 +38,8 @@
 	status = "okay";
 };
 
-&timer4 {
-	status = "disabled";
-};
+/*
+*&timer4 {
+*	status = "disabled";
+*};
+*/

@@ -182,9 +182,21 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     }
     else
     {
-        printk("Allocate memory successfully address %p!!!\r\n", hardware_drv_mem_st_ptr);
+        printk("Allocate memory successfully address %p for Registers!!!\r\n", hardware_drv_mem_st_ptr);
     }
     
+    hardware_timer_data_st_ptr = devm_kzalloc(my_device_ptr, sizeof(hardware_timer_data_t), GFP_KERNEL);
+
+    if (NULL == hardware_timer_data_st_ptr)
+    {
+        printk("Can't allocate memory!!!\r\n");
+        return -ENOMEM;
+    }
+    else
+    {
+        printk("Allocate memory successfully address %p for Hardware Timer!!!\r\n", hardware_timer_data_st_ptr);
+    }
+
     hardware_drv_mem_st_ptr->addr = devm_ioremap_resource(my_device_ptr, io);
 
     if (IS_ERR(hardware_drv_mem_st_ptr->addr))
@@ -312,7 +324,8 @@ module_param_cb(param_cb, &my_kernel_param_ops, &param_cb, (S_IRUSR | S_IWUSR));
 
 ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, loff_t *my_loff)
 {
-    size_t len = sizeof(my_buff) - *my_loff;
+    unsigned long len = sizeof(my_buff) - *my_loff;
+    ssize_t byte_read = 0;
 
     if (*my_loff >= sizeof(my_buff))
     {
@@ -335,9 +348,10 @@ ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, 
 
     printk("Size is %zu\r\n", sizeof(my_buff));
     unsigned long bytes_not_copy = copy_to_user(user_buff, (const void *)(my_buff + *my_loff), len);
-    *my_loff += (len - bytes_not_copy);
+    byte_read = (ssize_t)(len - bytes_not_copy);
+    *my_loff += byte_read;
     
-    return *my_loff;
+    return byte_read;
 }
 
 ssize_t my_write(struct file *my_file, const char __user *user_buff, size_t buff_size, loff_t *my_loff)

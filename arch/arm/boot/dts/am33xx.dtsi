@@ -698,13 +698,15 @@
 			ti,hwmods = "timer3";
 		};
 
-		timer4: timer@48044000 {
-			compatible = "ti,am335x-timer";
-			reg = <0x48044000 0x400>;
-			interrupts = <92>;
-			ti,hwmods = "timer4";
-			ti,timer-pwm;
-		};
+		/*
+		*timer4: timer@48044000 {
+		*	compatible = "ti,am335x-timer";
+		*	reg = <0x48044000 0x400>;
+		*	interrupts = <92>;
+		*	ti,hwmods = "timer4";
+		*	ti,timer-pwm;
+		*};
+		*/
 
 		timer5: timer@48046000 {
 			compatible = "ti,am335x-timer";
