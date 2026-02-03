@@ -52,9 +52,6 @@ static const struct kernel_param_ops my_kernel_param_ops =
     .get = my_get
 };
 
-hardware_mem_data_t *hardware_drv_mem_st_ptr = NULL;
-hardware_timer_data_t hardware_timer_data_st = {0};
-
 // static int __init my_gpio_init(void);
 // static void __exit my_gpio_end(void);
 
@@ -157,6 +154,8 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     int return_val = 0;
     struct device *my_device_ptr = &my_platform_device->dev;
     struct resource *io = NULL;
+    hardware_mem_data_t *hardware_drv_mem_st_ptr = NULL;
+    hardware_timer_data_t *hardware_timer_data_st_ptr = NULL;
     size_t i;
 
     // Module initialization code
@@ -198,11 +197,11 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
         printk(KERN_INFO "Base address is %p\r\n", hardware_drv_mem_st_ptr->addr);
     }
 
-    hardware_timer_data_st.freq = 50;
-    hardware_timer_data_st.duty_cycle = 50;
-    hardware_timer_data_st.mem_data_ptr = hardware_drv_mem_st_ptr;
+    hardware_timer_data_st_ptr->freq = 50;
+    hardware_timer_data_st_ptr->duty_cycle = 50;
+    hardware_timer_data_st_ptr->mem_data_ptr = hardware_drv_mem_st_ptr;
 
-    if (PWM_gen_init(&hardware_timer_data_st, my_device_ptr))
+    if (PWM_gen_init(hardware_timer_data_st_ptr, my_device_ptr))
     {
         printk(KERN_ERR "Failed to generate PWM!!!!\r\n");
     }
@@ -210,6 +209,8 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     {
         printk(KERN_INFO "Generate PWM successfully!!!!\r\n");
     }
+
+    platform_set_drvdata(my_platform_device, (void *)hardware_timer_data_st_ptr);
 
     /*-------------------------------------------------------------------------------------*/
 
@@ -288,7 +289,11 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
 int bbb_driver_remove(struct platform_device *my_platform_device)
 {
     // Module exit code
-    PWM_gen_exit(&hardware_timer_data_st);
+
+    hardware_timer_data_t *hardware_timer_data_st_ptr = NULL;
+
+    hardware_timer_data_st_ptr = platform_get_drvdata(my_platform_device);
+    PWM_gen_exit(hardware_timer_data_st_ptr);
 
     device_destroy(my_class, my_dev);
     class_destroy(my_class);
