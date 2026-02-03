@@ -1,4 +1,6 @@
-obj-m += my_driver.o
+# Example Makefile snippet
+obj-m += my_driver_mod.o
+my_driver_mod-objs := my_driver.o std_util.o timer.o
 
 KDIR := /home/pc/Documents/Advanced_Embedded/linux
 

@@ -7,6 +7,8 @@
 #include "linux/ioctl.h"
 #include "linux/platform_device.h"
 #include "linux/of.h"
+#include "std_util.h"
+#include "timer_reg.h"
 
 #define MY_CH_DRIVER "my_driver"
 #define BUFF_LEN 10
@@ -37,7 +39,7 @@ static uint32_t my_val = 0;
 static struct class *my_class = NULL;
 
 /*passing argument*/
-static int param_arr[3] = {0, 0, 0};
+static int param_arr[3] = {65, 66, 67};
 static unsigned int arr_num = 0;
 static int param_cb = 0;
 /* Returns 0, or -errno.  arg is in kp->arg. */
@@ -50,8 +52,8 @@ static const struct kernel_param_ops my_kernel_param_ops =
     .get = my_get
 };
 
-module_param_array(param_arr, int, &arr_num, (S_IRUSR | S_IWUSR));
-module_param_cb(param_cb, &my_kernel_param_ops, &param_cb, (S_IRUSR | S_IWUSR));
+hardware_mem_data_t *hardware_drv_mem_st_ptr = NULL;
+hardware_timer_data_t hardware_timer_data_st = {0};
 
 // static int __init my_gpio_init(void);
 // static void __exit my_gpio_end(void);
@@ -126,14 +128,8 @@ module_param_cb(param_cb, &my_kernel_param_ops, &param_cb, (S_IRUSR | S_IWUSR));
 // module_init(my_gpio_init);
 // module_exit(my_gpio_end);
 
-int bbb_timer4_probe(struct platform_device *my_platform_device);
-int bbb_timer4_remove(struct platform_device *my_platform_device);
-
-struct hardware_drv_data
-{
-    void __iomem *addr;
-    struct platform_device *pdev;
-};
+int bbb_driver_probe(struct platform_device *my_platform_device);
+int bbb_driver_remove(struct platform_device *my_platform_device);
 
 static const struct of_device_id timer4_bbb_id_st[] =
 {
@@ -145,10 +141,10 @@ static const struct of_device_id timer4_bbb_id_st[] =
     }
 };
 
-static struct platform_driver bbb_timer4_driver_st =
+static struct platform_driver bbb_driver_st =
 {
-    .probe = bbb_timer4_probe,
-    .remove = bbb_timer4_remove,
+    .probe = bbb_driver_probe,
+    .remove = bbb_driver_remove,
     .driver =
     {
         .name = "bbb_timer4",
@@ -156,13 +152,12 @@ static struct platform_driver bbb_timer4_driver_st =
     }
 };
 
-int bbb_timer4_probe(struct platform_device *my_platform_device)
+int bbb_driver_probe(struct platform_device *my_platform_device)
 {
     int return_val = 0;
-    unsigned int i;
-    struct hardware_drv_data *hardware_drv_data_st = NULL;
-    struct device *my_device = &my_platform_device->dev;
+    struct device *my_device_ptr = &my_platform_device->dev;
     struct resource *io = NULL;
+    size_t i;
 
     // Module initialization code
     printk(KERN_INFO "\r\nModule begin!!!\r\n");
@@ -179,28 +174,41 @@ int bbb_timer4_probe(struct platform_device *my_platform_device)
         printk("Get resource successfully!!!\r\n");
     }
 
-    hardware_drv_data_st = devm_kzalloc(my_device, sizeof(struct hardware_drv_data), GFP_KERNEL);
+    hardware_drv_mem_st_ptr = devm_kzalloc(my_device_ptr, sizeof(hardware_mem_data_t), GFP_KERNEL);
 
-    if (NULL == hardware_drv_data_st)
+    if (NULL == hardware_drv_mem_st_ptr)
     {
         printk("Can't allocate memory!!!\r\n");
         return -ENOMEM;
     }
     else
     {
-        printk("Allocate memory successfully address %p!!!\r\n", hardware_drv_data_st);
+        printk("Allocate memory successfully address %p!!!\r\n", hardware_drv_mem_st_ptr);
     }
     
-    hardware_drv_data_st->addr = devm_ioremap_resource(my_device, io);
+    hardware_drv_mem_st_ptr->addr = devm_ioremap_resource(my_device_ptr, io);
 
-    if (IS_ERR(hardware_drv_data_st->addr))
+    if (IS_ERR(hardware_drv_mem_st_ptr->addr))
     {
         printk("Can't get base address!!!\r\n");
-        return PTR_ERR((const void *)hardware_drv_data_st->addr);
+        return PTR_ERR((const void *)hardware_drv_mem_st_ptr->addr);
     }
     else
     {
-        printk(KERN_INFO "Base address is %p\r\n", hardware_drv_data_st->addr);
+        printk(KERN_INFO "Base address is %p\r\n", hardware_drv_mem_st_ptr->addr);
+    }
+
+    hardware_timer_data_st.freq = 50;
+    hardware_timer_data_st.duty_cycle = 50;
+    hardware_timer_data_st.mem_data_ptr = hardware_drv_mem_st_ptr;
+
+    if (PWM_gen_init(&hardware_timer_data_st, my_device_ptr))
+    {
+        printk(KERN_ERR "Failed to generate PWM!!!!\r\n");
+    }
+    else
+    {
+        printk(KERN_INFO "Generate PWM successfully!!!!\r\n");
     }
 
     /*-------------------------------------------------------------------------------------*/
@@ -245,7 +253,15 @@ int bbb_timer4_probe(struct platform_device *my_platform_device)
         printk("Create class successfully!!!\r\n");
     }
 
-    return_val = (int)IS_ERR(device_create(my_class, NULL, my_dev, NULL, MY_CH_DRIVER));
+    if (IS_ERR(device_create(my_class, NULL, my_dev, NULL, MY_CH_DRIVER)))
+    {
+        printk("Can't create device!!!\r\n");
+        return E_FAIL;
+    }
+    else
+    {
+        printk("Create device successfully!!!\r\n");
+    }
 
     if (0 != return_val)
     {
@@ -269,9 +285,11 @@ int bbb_timer4_probe(struct platform_device *my_platform_device)
     return return_val;
 }
 
-int bbb_timer4_remove(struct platform_device *my_platform_device)
+int bbb_driver_remove(struct platform_device *my_platform_device)
 {
     // Module exit code
+    PWM_gen_exit(&hardware_timer_data_st);
+
     device_destroy(my_class, my_dev);
     class_destroy(my_class);
     cdev_del(&my_cdev);
@@ -281,8 +299,11 @@ int bbb_timer4_remove(struct platform_device *my_platform_device)
     return 0;
 }
 
-module_platform_driver(bbb_timer4_driver_st);
+module_platform_driver(bbb_driver_st);
 MODULE_DEVICE_TABLE(of, timer4_bbb_id_st);
+
+module_param_array(param_arr, int, &arr_num, (S_IRUSR | S_IWUSR));
+module_param_cb(param_cb, &my_kernel_param_ops, &param_cb, (S_IRUSR | S_IWUSR));
 
 ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, loff_t *my_loff)
 {
@@ -383,7 +404,7 @@ long my_unlocked_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg
         {
             if (0 == copy_from_user((void*)&my_val, (const void*)arg, (unsigned long)sizeof(my_val)))
             {
-                printk("Wrote successfully %s", my_buff);
+                printk("Wrote successfully %d", (int)my_val);
             }
             else
             {
@@ -398,7 +419,7 @@ long my_unlocked_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg
         {
             if (0 == copy_to_user((void*)arg, (const void*)&my_val, (unsigned long)sizeof(my_val)))
             {
-                printk("Read successfully %s", my_buff);
+                printk("Read successfully!!!\r\n");
             }
             else
             {
