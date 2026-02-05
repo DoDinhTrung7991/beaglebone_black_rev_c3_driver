@@ -324,6 +324,7 @@ module_param_cb(param_cb, &my_kernel_param_ops, &param_cb, (S_IRUSR | S_IWUSR));
 
 ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, loff_t *my_loff)
 {
+    unsigned long bytes_not_copy = 0;
     unsigned long len = sizeof(my_buff) - *my_loff;
     ssize_t byte_read = 0;
 
@@ -347,7 +348,7 @@ ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, 
     }
 
     printk("Size is %zu\r\n", sizeof(my_buff));
-    unsigned long bytes_not_copy = copy_to_user(user_buff, (const void *)(my_buff + *my_loff), len);
+    bytes_not_copy = copy_to_user(user_buff, (const void *)(my_buff + *my_loff), len);
     byte_read = (ssize_t)(len - bytes_not_copy);
     *my_loff += byte_read;
     

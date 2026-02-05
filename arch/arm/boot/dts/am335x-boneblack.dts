@@ -33,13 +33,3 @@
 		opp-supported-hw = <0x06 0x0100>;
 	};
 };
-
-&bbb_timer4 {
-	status = "okay";
-};
-
-/*
-*&timer4 {
-*	status = "disabled";
-*};
-*/

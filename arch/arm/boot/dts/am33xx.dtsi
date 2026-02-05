@@ -178,14 +178,13 @@
 		ranges;
 		ti,hwmods = "l3_main";
 
-		bbb_timer4:bbb_timer4@0x48044000 {
+		bbb_timer4:bbb_timer4@48044000 {
 			compatible = "ti,am3358-bbb_timer4";
 			reg = <0x48044000 0x1000>;
-			#address-cells = <1>;
-			#size-cells = <1>;
 			interrupts = <92>;
 			ti,hwmods = "timer4";
-			ti,timer-pwm;
+			clocks = <&timer4_fck>;
+			clock-names = "fck";
 			status = "disabled";
 		};
 
@@ -698,15 +697,13 @@
 			ti,hwmods = "timer3";
 		};
 
-		/*
-		*timer4: timer@48044000 {
-		*	compatible = "ti,am335x-timer";
-		*	reg = <0x48044000 0x400>;
-		*	interrupts = <92>;
-		*	ti,hwmods = "timer4";
-		*	ti,timer-pwm;
-		*};
-		*/
+		timer4: timer@48044000 {
+			compatible = "ti,am335x-timer";
+			reg = <0x48044000 0x400>;
+			interrupts = <92>;
+			ti,hwmods = "timer4";
+			ti,timer-pwm;
+		};
 
 		timer5: timer@48046000 {
 			compatible = "ti,am335x-timer";

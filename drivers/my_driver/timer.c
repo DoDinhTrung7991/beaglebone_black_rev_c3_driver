@@ -44,6 +44,18 @@ int PWM_gen_init(hardware_timer_data_t *timer_data_ptr, struct device *device_pt
     rate = clk_get_rate(clk_st_ptr);
     printk(KERN_INFO "Timer clock rate: %lu Hz\n", rate);
 
+    if (rate == 0)
+    {
+        printk(KERN_ERR "Clock rate is 0, cannot calculate PWM parameters!!!\r\n");
+        return -EINVAL;
+    }
+
+    if (timer_data_ptr->freq == 0)
+    {
+        printk(KERN_ERR "Target frequency cannot be 0!!!\r\n");
+        return -EINVAL;
+    }
+
     /* Calculate PWM parameters */
     period_cycles = rate / timer_data_ptr->freq;
     duty_cycles = period_cycles * timer_data_ptr->duty_cycle / 100;
