@@ -633,15 +633,9 @@
 };
 
 
-&bbb_timer4 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&timer4_pins>;
-	status = "okay";
-};
-
 &timer4{
-    status = "disabled";
-	//ti,timer-pwm;
+    status = "okay";
+	ti,timer-pwm;
 };
 &timer5{
     status = "okay";
