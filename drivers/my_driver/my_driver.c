@@ -9,11 +9,13 @@
 #include "linux/of.h"
 #include "std_util.h"
 #include "timer_reg.h"
+#include "linux/mutex.h"
+#include "linux/pm_runtime.h"
 
 #define MY_CH_DRIVER "my_driver"
 #define BUFF_LEN 10
-#define WR_VALUE _IOW('g', 'a', uint32_t*)
-#define RD_VALUE _IOR('g', 'b', uint32_t*)
+#define WR_VALUE _IOW('g', 'a', uint32_t)
+#define WRD_VALUE _IOWR('g', 'b', uint32_t)
 
 /*create device file and sys class*/
 static dev_t my_dev = 0;
@@ -35,8 +37,8 @@ static const struct file_operations my_file_operations = {
     .compat_ioctl = my_compat_ioctl
 };
 static char my_buff[BUFF_LEN] = {0};
-static uint32_t my_val = 0;
 static struct class *my_class = NULL;
+static DEFINE_MUTEX(my_mutex);
 
 /*passing argument*/
 static int param_arr[3] = {65, 66, 67};
@@ -149,14 +151,14 @@ static struct platform_driver bbb_driver_st =
     }
 };
 
+hardware_mem_data_t *hardware_drv_mem_st_ptr = NULL;
+
 int bbb_driver_probe(struct platform_device *my_platform_device)
 {
-    int return_val = 0;
+    int return_val = E_OK;
     struct device *my_device_ptr = &my_platform_device->dev;
     struct resource *io = NULL;
-    hardware_mem_data_t *hardware_drv_mem_st_ptr = NULL;
     hardware_timer_data_t *hardware_timer_data_st_ptr = NULL;
-    size_t i;
 
     // Module initialization code
     printk(KERN_INFO "\r\nModule begin!!!\r\n");
@@ -213,9 +215,21 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     hardware_timer_data_st_ptr->duty_cycle = 50;
     hardware_timer_data_st_ptr->mem_data_ptr = hardware_drv_mem_st_ptr;
 
-    if (PWM_gen_init(hardware_timer_data_st_ptr, my_device_ptr))
+    /* Enable Power Management Runtime to turn on the peripheral */
+    pm_runtime_enable(my_device_ptr);
+    return_val = pm_runtime_get_sync(my_device_ptr);
+    if (return_val < 0)
+    {
+        printk(KERN_ERR "Failed to enable PM runtime!!!\n");
+        pm_runtime_put_noidle(my_device_ptr);
+        return return_val;
+    }
+
+    return_val = PWM_gen_init(hardware_timer_data_st_ptr, my_device_ptr);
+    if (return_val)
     {
         printk(KERN_ERR "Failed to generate PWM!!!!\r\n");
+        goto pm_disable;
     }
     else
     {
@@ -226,13 +240,14 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
 
     /*-------------------------------------------------------------------------------------*/
 
+    printk(KERN_INFO "\r\nCreate Device driver interface!!!\r\n");
     // Register Major number and Minor number for new devices.
     return_val = alloc_chrdev_region(&my_dev, 0, 1, "my_device");
 
     if (0 > return_val)
     {
         printk(KERN_ERR "initialize Major number failed!!!\r\n");
-        return return_val;
+        goto pwm_exit;
     }
     else
     {
@@ -246,7 +261,8 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     if (0 > return_val)
     {
         printk(KERN_ERR "Failed to register device files to VFS.\r\n");
-        return return_val;
+        return_val = EINVAL;
+        goto unreg_region;
     }
     else
     {
@@ -259,7 +275,8 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     if (IS_ERR(my_class))
     {
         printk("Can't create class!!!\r\n");
-        return PTR_ERR(my_class);
+        return_val = PTR_ERR(my_class);
+        goto del_cdev;
     }
     else
     {
@@ -269,32 +286,30 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     if (IS_ERR(device_create(my_class, NULL, my_dev, NULL, MY_CH_DRIVER)))
     {
         printk("Can't create device!!!\r\n");
-        return E_FAIL;
+        return_val = PTR_ERR(my_class);
+        goto destroy_class;
     }
     else
     {
         printk("Create device successfully!!!\r\n");
     }
 
-    if (0 != return_val)
-    {
-        pr_err("Can not create device driver!!\r\n");
-        class_destroy(my_class);
-        cdev_del(&my_cdev);
-        unregister_chrdev_region(my_dev, 1);
-        return return_val;
-    }
-    else
-    {
-        printk(KERN_INFO "Finish creating device driver!!!\r\n\r\n");
-    }
+    printk(KERN_INFO "Finish creating device driver!!!\r\n\r\n");
+    return return_val;
 
-    // Read input
-    for (i = 0; i < arr_num; i ++)
-    {
-        printk(KERN_INFO "param_arr[%d] = %d\r\n", i, param_arr[i]);
-    }
-
+destroy_class:
+    class_destroy(my_class);
+del_cdev:
+    cdev_del(&my_cdev);
+unreg_region:
+    unregister_chrdev_region(my_dev, 1);
+pwm_exit:
+    PWM_gen_exit(hardware_timer_data_st_ptr);
+pm_disable:
+    pm_runtime_put_sync(my_device_ptr);
+    pm_runtime_disable(my_device_ptr);
+    // Ensure global pointer is NULL if probe fails
+    hardware_drv_mem_st_ptr = NULL;
     return return_val;
 }
 
@@ -307,10 +322,14 @@ int bbb_driver_remove(struct platform_device *my_platform_device)
     hardware_timer_data_st_ptr = platform_get_drvdata(my_platform_device);
     PWM_gen_exit(hardware_timer_data_st_ptr);
 
+    pm_runtime_put_sync(&my_platform_device->dev);
+    pm_runtime_disable(&my_platform_device->dev);
+
     device_destroy(my_class, my_dev);
     class_destroy(my_class);
     cdev_del(&my_cdev);
     unregister_chrdev_region(my_dev, 1);
+    hardware_drv_mem_st_ptr = NULL;
     printk("\r\nModule end!!!\r\n");
 
     return 0;
@@ -328,9 +347,11 @@ ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, 
     unsigned long len = sizeof(my_buff) - *my_loff;
     ssize_t byte_read = 0;
 
+    mutex_lock(&my_mutex);
     if (*my_loff >= sizeof(my_buff))
     {
         *my_loff = 0;
+        mutex_unlock(&my_mutex);
         return 0;
     }
     else
@@ -352,6 +373,7 @@ ssize_t my_read(struct file *my_file, char __user *user_buff, size_t buff_size, 
     byte_read = (ssize_t)(len - bytes_not_copy);
     *my_loff += byte_read;
     
+    mutex_unlock(&my_mutex);
     return byte_read;
 }
 
@@ -361,6 +383,7 @@ ssize_t my_write(struct file *my_file, const char __user *user_buff, size_t buff
     ssize_t bytes_written = 0;
     unsigned long bytes_to_copy = buff_size - *my_loff;
 
+    mutex_lock(&my_mutex);
     if (bytes_to_copy > sizeof(my_buff))
     {
         printk(KERN_WARNING "User data is bigger than my_buff!!!\r\n");
@@ -397,6 +420,7 @@ ssize_t my_write(struct file *my_file, const char __user *user_buff, size_t buff
         bytes_written = (ssize_t)buff_size;
     }
 
+    mutex_unlock(&my_mutex);
     return bytes_written;
 }
 
@@ -416,42 +440,66 @@ int my_release(struct inode *my_inode, struct file *my_file)
 
 long my_unlocked_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg)
 {
-    long ret = 0;
+    uint32_t val = 0;
 
     switch(cmd)
     {
         case WR_VALUE:
         {
-            if (0 == copy_from_user((void*)&my_val, (const void*)arg, (unsigned long)sizeof(my_val)))
+            if (0 == copy_from_user((void*)&val, (const void __user *)arg, (unsigned long)sizeof(val)))
             {
-                printk("Wrote successfully %d", (int)my_val);
+                printk("Wrote successfully %d\r\n", (int)val);
             }
             else
             {
                 printk("Wrote failed!!!\r\n");
-                ret = -EFAULT;
+                return -EFAULT;
             }
 
             break;
         }
 
-        case RD_VALUE:
+        case WRD_VALUE:
         {
-            if (0 == copy_to_user((void*)arg, (const void*)&my_val, (unsigned long)sizeof(my_val)))
+            if (!hardware_drv_mem_st_ptr || !hardware_drv_mem_st_ptr->addr)
             {
-                printk("Read successfully!!!\r\n");
+                printk(KERN_ERR "Driver memory is not initialized!\r\n");
+                return -EFAULT;
+            }
+
+            // 1. Read the register address/offset from user
+            if (0 == copy_from_user(&val, (const void __user *)arg, sizeof(val)))
+            {
+                printk("Get address successfully to read %X\r\n", val);
             }
             else
             {
-                printk("Read failed!!!\r\n");
-                ret = -EFAULT;
+                printk("Wrote failed!!!\r\n");
+                return -EFAULT;
+            }
+
+            // 2. Validate address range
+            if ((val < TIMER4_BASE) || (val > TIMER4_END))
+            {
+                printk(KERN_ERR "Out of range address!!!\r\n");
+                return -EINVAL;
+            }
+            
+            // 3. Read the register
+            val = my_reg_read(hardware_drv_mem_st_ptr->addr, (val - TIMER4_BASE));
+            printk(KERN_INFO "Register value is %u\r\n", val);
+
+            // 4. Send value back to user
+            if (copy_to_user((void __user *)arg, &val, sizeof(val)))
+            {
+                 return -EFAULT;
             }
 
             break;
         }
     }
 
-    return ret;
+    return E_OK;
 }
 
 long my_compat_ioctl(struct file *my_file, unsigned int cmd, unsigned long arg)
