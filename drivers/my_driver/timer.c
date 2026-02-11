@@ -69,8 +69,8 @@ int PWM_gen_init(hardware_timer_data_t *timer_data_ptr, struct device *device_pt
     my_reg_write(timer_data_ptr->mem_data_ptr->addr, TLDR_OFFSET, tldr_val);
     my_reg_write(timer_data_ptr->mem_data_ptr->addr, TMAR_OFFSET, tmar_val);
     my_reg_write(timer_data_ptr->mem_data_ptr->addr, TCRR_OFFSET, tldr_val);
-    // Start timer in PWM mode (PT=0, TRG=2, CE=1, AR=1, ST=1)
-    tclr_val = (0 << 12) | (2 << 10) | (1 << 6) | (1 << 1) | (1 << 0);
+    // Start timer in PWM mode (PT=1, TRG=2, CE=1, AR=1, ST=1)
+    tclr_val = (1 << 12) | (2 << 10) | (1 << 6) | (1 << 1) | (1 << 0);
     my_reg_write(timer_data_ptr->mem_data_ptr->addr, TCLR_OFFSET, tclr_val);
 
     return return_val;

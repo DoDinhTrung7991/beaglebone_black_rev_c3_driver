@@ -320,7 +320,6 @@
 
 &timer4 {
 	status = "disabled";
-	/delete-property/ ti,hwmods;
 };
 
 &bbb_timer4 {
