@@ -14,8 +14,8 @@ struct hardware_mem_data
 
 typedef struct hardware_mem_data hardware_mem_data_t;
 
-void my_reg_write(void __iomem *addr, uint32_t offset_u32, unsigned int val);
+void my_reg_write(volatile void __iomem *addr, unsigned int offset_u32, u32 val);
 
-unsigned int my_reg_read(void __iomem *addr, uint32_t offset_u32);
+u32 my_reg_read(volatile void __iomem *addr, unsigned int offset_u32);
 
 #endif

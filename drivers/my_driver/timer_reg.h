@@ -4,6 +4,9 @@
 #include "std_util.h"
 #include <linux/clk.h>
 
+#define TIMER4_BASE             0x48044000U
+#define TIMER4_END              0x48044FFFU
+
 #define TIDR_OFFSET             0x00
 #define TIOCP_CFG_OFFSET        0x10
 #define IRQ_EOI_OFFSET          0x20
