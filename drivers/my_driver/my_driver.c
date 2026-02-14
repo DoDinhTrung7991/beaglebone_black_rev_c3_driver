@@ -10,7 +10,6 @@
 #include "std_util.h"
 #include "timer_reg.h"
 #include "linux/mutex.h"
-#include "linux/pm_runtime.h"
 
 #define MY_CH_DRIVER "my_driver"
 #define BUFF_LEN 10
@@ -215,21 +214,11 @@ int bbb_driver_probe(struct platform_device *my_platform_device)
     hardware_timer_data_st_ptr->duty_cycle = 50;
     hardware_timer_data_st_ptr->mem_data_ptr = hardware_drv_mem_st_ptr;
 
-    /* Enable Power Management Runtime to turn on the peripheral */
-    pm_runtime_enable(my_device_ptr);
-    return_val = pm_runtime_get_sync(my_device_ptr);
-    if (return_val < 0)
-    {
-        printk(KERN_ERR "Failed to enable PM runtime!!!\n");
-        pm_runtime_put_noidle(my_device_ptr);
-        return return_val;
-    }
-
     return_val = PWM_gen_init(hardware_timer_data_st_ptr, my_device_ptr);
     if (return_val)
     {
         printk(KERN_ERR "Failed to generate PWM!!!!\r\n");
-        goto pm_disable;
+        goto pwm_exit;
     }
     else
     {
@@ -305,9 +294,6 @@ unreg_region:
     unregister_chrdev_region(my_dev, 1);
 pwm_exit:
     PWM_gen_exit(hardware_timer_data_st_ptr);
-pm_disable:
-    pm_runtime_put_sync(my_device_ptr);
-    pm_runtime_disable(my_device_ptr);
     // Ensure global pointer is NULL if probe fails
     hardware_drv_mem_st_ptr = NULL;
     return return_val;
@@ -321,10 +307,6 @@ int bbb_driver_remove(struct platform_device *my_platform_device)
 
     hardware_timer_data_st_ptr = platform_get_drvdata(my_platform_device);
     PWM_gen_exit(hardware_timer_data_st_ptr);
-
-    pm_runtime_put_sync(&my_platform_device->dev);
-    pm_runtime_disable(&my_platform_device->dev);
-
     device_destroy(my_class, my_dev);
     class_destroy(my_class);
     cdev_del(&my_cdev);

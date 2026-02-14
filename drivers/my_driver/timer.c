@@ -3,6 +3,9 @@
 #include "linux/module.h"
 #include "linux/fs.h"
 #include "std_util.h"
+#include "linux/pm_runtime.h"
+
+struct device *my_device_ptr = NULL;
 
 int PWM_gen_init(hardware_timer_data_t *timer_data_ptr, struct device *device_ptr)
 {
@@ -14,6 +17,19 @@ int PWM_gen_init(hardware_timer_data_t *timer_data_ptr, struct device *device_pt
     uint32_t tldr_val;
     uint32_t tmar_val;
     uint32_t tclr_val;
+
+    /* Enable Power Management Runtime to turn on the peripheral */
+    pm_runtime_enable(device_ptr);
+    return_val = pm_runtime_get_sync(device_ptr);
+    if (return_val < 0)
+    {
+        printk(KERN_ERR "Failed to enable PM runtime!!!\r\n");
+        pm_runtime_put_sync(device_ptr);
+        pm_runtime_disable(device_ptr);
+        return return_val;
+    }
+
+    my_device_ptr = device_ptr;
 
     /* Get Clock */
     clk_st_ptr = devm_clk_get(device_ptr, "fck");
@@ -89,6 +105,10 @@ int PWM_gen_exit(hardware_timer_data_t *timer_data_ptr)
             clk_disable_unprepare(timer_data_ptr->clk);
         }
     }
+
+    pm_runtime_put_sync(my_device_ptr);
+    pm_runtime_disable(my_device_ptr);
+    my_device_ptr = NULL;
 
     return 0;
 }
